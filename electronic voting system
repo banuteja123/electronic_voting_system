@@ -1,0 +1,110 @@
+import hashlib
+import time
+from cryptography.fernet import Fernet
+def generate_key():
+    return Fernet.generate_key()
+class Blockchain:
+    def __init__(self):
+        self.chain = []
+        self.create_block(proof=1, previous_hash='0')
+    def create_block(self, proof, previous_hash):
+        block = {
+            'index': len(self.chain) + 1,
+            'timestamp': str(time.time()),
+            'proof': proof,
+            'previous_hash': previous_hash,
+            'votes': []
+        }
+        self.chain.append(block)
+        return block
+
+    def get_previous_block(self):
+        return self.chain[-1]
+
+    def proof_of_work(self, previous_proof):
+        new_proof = 1
+        check_proof = False
+        while not check_proof:
+            hash_operation = hashlib.sha256(str(new_proof**2 - previous_proof**2).encode()).hexdigest()
+            if hash_operation[:4] == '0000':
+                check_proof = True
+            else:
+                new_proof += 1
+        return new_proof
+    def hash(self, block):
+        encoded_block = str(block).encode()
+        return hashlib.sha256(encoded_block).hexdigest()
+    def add_vote(self, vote):
+        previous_block = self.get_previous_block()
+        previous_block['votes'].append(vote)
+        return previous_block
+    def is_chain_valid(self, chain):
+        previous_block = chain[0]
+        block_index = 1
+        while block_index < len(chain):
+            block = chain[block_index]
+            if block['previous_hash'] != self.hash(previous_block):
+                return False
+            previous_proof = previous_block['proof']
+            proof = block['proof']
+            hash_operation = hashlib.sha256(str(proof**2 - previous_proof**2).encode()).hexdigest()
+            if hash_operation[:4] != '0000':
+                return False
+            previous_block = block
+            block_index += 1
+        return True
+class ElectronicVotingSystem:
+    def __init__(self, encryption_key):
+        self.voters = {}  # Store encrypted voter IDs and their voting status
+        self.candidates = {}  # Store candidate names and their vote count
+        self.votes = []  # List to store all votes
+        self.blockchain = Blockchain()
+        self.fernet = Fernet(encryption_key)
+    def add_candidate(self, candidate_name):
+        if candidate_name not in self.candidates:
+            self.candidates[candidate_name] = 0
+        else:
+            print(f"Candidate {candidate_name} already exists.")
+    def register_voter(self, voter_id):
+        encrypted_voter_id = self.fernet.encrypt(voter_id.encode()).decode()
+        if encrypted_voter_id not in self.voters:
+            self.voters[encrypted_voter_id] = False  # Voter has not voted yet
+        else:
+            print(f"Voter ID {voter_id} already registered.")
+    def vote(self, voter_id, candidate_name):
+        encrypted_voter_id = self.fernet.encrypt(voter_id.encode()).decode()
+        if encrypted_voter_id not in self.voters:
+            print(f"Voter ID {voter_id} is not registered.")
+            return
+        if self.voters[encrypted_voter_id]:
+            print("Voter has already voted.")
+            return
+        if candidate_name not in self.candidates:
+            print(f"Candidate {candidate_name} does not exist.")
+            return        
+        vote_hash = self.hash_vote(voter_id, candidate_name)
+        self.blockchain.add_vote(vote_hash)
+        self.candidates[candidate_name] += 1
+        self.voters[encrypted_voter_id] = True
+        print(f"Vote recorded for {candidate_name} by voter {voter_id}.")
+        previous_proof = self.blockchain.get_previous_block()['proof']
+        proof = self.blockchain.proof_of_work(previous_proof)
+        previous_hash = self.blockchain.hash(self.blockchain.get_previous_block())
+        self.blockchain.create_block(proof, previous_hash)
+    def hash_vote(self, voter_id, candidate_name):
+        vote_data = f"{voter_id}:{candidate_name}"
+        return hashlib.sha256(vote_data.encode()).hexdigest()
+    def results(self):
+        print("Election Results:")
+        for candidate, votes in self.candidates.items():
+            print(f"{candidate}: {votes} votes")
+key = generate_key()
+evs = ElectronicVotingSystem(key)
+evs.add_candidate("Candidate_A")
+evs.add_candidate("Candidate_B")
+evs.register_voter("voter_001")
+evs.register_voter("voter_002")
+evs.vote("voter_001", "Candidate_A")
+evs.vote("voter_002", "Candidate_B")
+evs.vote("voter_001", "Candidate_B") 
+evs.results()
